@@ -54,21 +54,6 @@ async def lifespan(app: FastAPI):
         print(f"Loaded {len(df_stocks)} stocks (KR: {len(df_krx)}, US: {len(df_us)}).")
         
     except Exception as e:
-        print(f"Failed to load stock list: {e}")
-        df_stocks = pd.DataFrame(columns=['Code', 'Name', 'market'])
-    yield
-
-app = FastAPI(lifespan=lifespan)
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://*.vercel.app"], # Allow Vercel for prod
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 class StockItem(BaseModel):
     name: str
     code: str
