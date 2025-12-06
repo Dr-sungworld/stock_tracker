@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+backend/venv/
+backend/__pycache__/
+
+# Environment Variables (Secrets)
+.env
+backend/.env
+
+# Build Artifacts
+.next/
+dist/
+build/
+*.pyc
+
+# IDEs
+.vscode/
+.idea/
+
+# System
+.DS_Store
+Thumbs.db

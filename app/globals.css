@@ -1,0 +1,245 @@
+:root {
+  --bg-color: #0d1117;
+  --card-bg: rgba(22, 27, 34, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --primary-accent: #238636;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --danger: #cf222e;
+  /* Red for loss */
+  --success: #2ea043;
+  /* Green/Blue for gain - wait, Korea uses Red for UP and Blue for DOWN. */
+  /* Korean Market Colors: Red = UP, Blue = DOWN */
+  --up-color: #ff3b30;
+  --down-color: #007aff;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background-image:
+    radial-gradient(circle at 10% 20%, rgba(0, 122, 255, 0.1) 0%, transparent 20%),
+    radial-gradient(circle at 90% 80%, rgba(255, 59, 48, 0.1) 0%, transparent 20%);
+}
+
+.glass-panel {
+  background: var(--card-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+h1 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #fff 0%, #888 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+input {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--glass-border);
+  color: white;
+  padding: 0.8rem 1rem;
+  border-radius: 8px;
+  width: 100%;
+  font-size: 1rem;
+  transition: all 0.2s;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: white;
+  color: black;
+  padding: 0.8rem 1.5rem;
+}
+
+.btn-primary:hover {
+  background: #ddd;
+}
+
+.mobile-full {
+  /* Default no-op on desktop */
+  display: block;
+}
+
+.card {
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  transition: transform 0.2s;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+}
+
+.text-up {
+  color: var(--up-color);
+}
+
+.text-down {
+  color: var(--down-color);
+}
+
+.flex-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #1f242d 25%, #2a303c 50%, #1f242d 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+  border-radius: 4px;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Autocomplete suggestions */
+.suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #1c2128;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  margin-top: 4px;
+  z-index: 10;
+  overflow: hidden;
+}
+
+.suggestion-item {
+  padding: 0.8rem 1rem;
+  cursor: pointer;
+}
+
+.suggestion-item:hover,
+.suggestion-item.active {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+/* Responsive Utilities */
+.responsive-flex {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.input-group {
+  display: flex;
+  gap: 1rem;
+  width: 100%;
+}
+
+.summary-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+@media (max-width: 600px) {
+  .container {
+    padding: 1rem 0.5rem;
+  }
+
+  h1 {
+    font-size: 1.8rem;
+    margin-bottom: 1.5rem;
+  }
+
+  /* Stack inputs on mobile */
+  .input-group {
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+
+  /* Stack summary items */
+  .summary-panel {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .summary-panel>div {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* Adjust stock card layout */
+  .card {
+    padding: 1rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.8rem;
+  }
+
+  .card .text-right {
+    text-align: left !important;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--glass-border);
+  }
+
+  /* Make delete button absolute or different position */
+  .card button {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+  }
+
+  .card {
+    position: relative;
+    /* For absolute button */
+  }
+
+  .btn-primary {
+    width: 100%;
+    padding: 1rem;
+  }
+}

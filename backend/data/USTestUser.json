@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Apple Inc",
+    "code": "AAPL",
+    "buyPrice": 200,
+    "market": "US"
+  },
+  {
+    "name": "삼성전자",
+    "code": "005930",
+    "buyPrice": 50000,
+    "market": "KR"
+  }
+]
