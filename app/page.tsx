@@ -76,10 +76,12 @@ export default function Home() {
         }
       } catch (e) {
         console.error("Failed to load stocks from server", e);
-        setHoldings([]);
-      } finally {
-        setIsLoaded(true); // Mark as loaded regardless of success/fail to allow adding new
+        // Do NOT wipe local state on error, and do NOT allow saving empty state
+        alert("Failed to load data from server. Please refresh or check connection.");
+        return; // Exit without setting isLoaded(true)
       }
+      // Only mark as loaded if success (or empty list returned from server successfully)
+      setIsLoaded(true);
     };
     fetchHoldings();
   }, [user]);
