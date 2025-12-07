@@ -8,6 +8,7 @@ interface Stock {
   name: string;
   code: string;
   buyPrice: number;
+  quantity: number; // New Field: defaults to 1 if missing
   market?: 'KR' | 'US';
 }
 
@@ -31,6 +32,7 @@ export default function Home() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [buyPriceInput, setBuyPriceInput] = useState('');
+  const [quantityInput, setQuantityInput] = useState('1'); // Default Qty = 1
   const [selectedStock, setSelectedStock] = useState<{ name: string, code: string, market?: string } | null>(null);
 
   // Tab State
@@ -200,15 +202,18 @@ export default function Home() {
   };
 
   const handleAddStock = () => {
-    if (!selectedStock || !buyPriceInput) return;
-    const price = parseFloat(buyPriceInput.replace(/,/g, '')); // Allow decimals for US
-    if (isNaN(price)) return;
+    if (!selectedStock || !buyPriceInput || !quantityInput) return;
+    const price = parseFloat(buyPriceInput.replace(/,/g, ''));
+    const qty = parseInt(quantityInput.replace(/,/g, ''));
+
+    if (isNaN(price) || isNaN(qty) || qty <= 0) return;
 
     const newStock: Stock = {
       name: selectedStock.name,
       code: selectedStock.code,
       buyPrice: price,
-      market: (selectedStock.market as 'KR' | 'US') || 'KR' // Default to KR if missing
+      quantity: qty,
+      market: (selectedStock.market as 'KR' | 'US') || 'KR'
     };
 
     setHoldings([...holdings, newStock]);
@@ -216,6 +221,7 @@ export default function Home() {
     // Reset
     setQuery('');
     setBuyPriceInput('');
+    setQuantityInput('1');
     setSelectedStock(null);
   };
 
@@ -242,8 +248,8 @@ export default function Home() {
 
   // Summary Calculation (Global or Per Tab? User requested separation, usually separated summaries are better)
   // Let's do Per Tab Summary
-  const totalInvested = filteredData.reduce((acc, s) => acc + (s.buyPrice || 0), 0);
-  const totalCurrent = filteredData.reduce((acc, s) => acc + (s.currentPrice || s.buyPrice || 0), 0);
+  const totalInvested = filteredData.reduce((acc, s) => acc + ((s.buyPrice || 0) * (s.quantity || 1)), 0);
+  const totalCurrent = filteredData.reduce((acc, s) => acc + ((s.currentPrice || s.buyPrice || 0) * (s.quantity || 1)), 0);
   const totalReturn = totalCurrent - totalInvested;
   const totalRate = totalInvested > 0 ? (totalReturn / totalInvested) * 100 : 0;
 
@@ -391,6 +397,16 @@ export default function Home() {
             className="mobile-full"
             step={currentTab === 'US' ? "0.01" : "1"}
           />
+          <input
+            type="number"
+            placeholder="수량"
+            value={quantityInput}
+            onChange={(e) => setQuantityInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddStock()}
+            style={{ width: '80px' }}
+            className="mobile-full"
+            min="1"
+          />
           <button className="btn-primary mobile-full" onClick={handleAddStock}>
             추가
           </button>
@@ -437,27 +453,34 @@ export default function Home() {
           const rateColor = isProfit ? 'var(--up-color)' : (isLoss ? 'var(--down-color)' : 'white');
 
           // ROI Calculation
-          const stockReturn = (stock.currentPrice || 0) - stock.buyPrice;
-          const stockRoi = stock.buyPrice > 0 ? (stockReturn / stock.buyPrice) * 100 : 0;
+          const qty = stock.quantity || 1; // Fallback for old data
+          const currentVal = (stock.currentPrice || 0);
+          const totalVal = currentVal * qty;
+          const investedVal = stock.buyPrice * qty;
+
+          const stockReturn = totalVal - investedVal;
+          const stockRoi = investedVal > 0 ? (stockReturn / investedVal) * 100 : 0;
           const roiColor = stockRoi > 0 ? 'var(--up-color)' : (stockRoi < 0 ? 'var(--down-color)' : 'white');
 
           return (
             <div key={i} className="glass-panel card flex-between">
               <div>
                 <h3 style={{ margin: '0 0 0.2rem 0' }}>{stock.name}</h3>
-                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{stock.code}</div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                  {stock.code} <span style={{ marginLeft: '5px', color: '#aaa' }}>x {qty}</span>
+                </div>
               </div>
 
               <div className="text-right" style={{ flex: 1, display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#888' }}>매입가</div>
+                  <div style={{ fontSize: '0.8rem', color: '#888' }}>매입가 (Avg)</div>
                   <div>{formatCurrency(stock.buyPrice)}</div>
                 </div>
 
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#888' }}>현재가</div>
+                  <div style={{ fontSize: '0.8rem', color: '#888' }}>평가금 (Total)</div>
                   <div style={{ fontWeight: 'bold', color: rateColor }}>
-                    {stock.currentPrice ? formatCurrency(stock.currentPrice) : 'Loading...'}
+                    {stock.currentPrice ? formatCurrency(totalVal) : 'Loading...'}
                   </div>
                 </div>
 
