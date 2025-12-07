@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import os
+import datetime
 from supabase import create_client, Client
 import contextlib
 import pandas as pd
@@ -95,7 +96,8 @@ def load_holdings(user_id: str):
                 "name": row['name'],
                 "code": row['code'],
                 "market": row['market'],
-                "buyPrice": float(row['buy_price'])
+                "buyPrice": float(row['buy_price']),
+                "quantity": int(row.get('quantity', 1) or 1) # Default to 1
             })
         return data
     except Exception as e:
@@ -122,7 +124,8 @@ def save_holdings(user_id: str, holdings):
                 "name": h.get("name"),
                 "code": h.get("code"),
                 "market": h.get("market", "KR"),
-                "buy_price": h.get("buyPrice", 0)
+                "buy_price": h.get("buyPrice", 0),
+                "quantity": h.get("quantity", 1)
             })
             
         supabase.table('holdings').insert(db_rows).execute()
@@ -183,17 +186,19 @@ def get_price(code: str):
             if not found.empty:
                 market = found.iloc[0]['market']
         
+        print(f"DEBUG: Code={code}, Market={market}") # Debug Print
+
         if market == 'US':
             # US Stock Logic via FDR
             try:
-                # Get last 5 days
+                # Get last 14 days (safer for long weekends/holidays)
                 today = datetime.datetime.now()
-                start = today - datetime.timedelta(days=7)
+                start = today - datetime.timedelta(days=14)
                 
                 df = fdr.DataReader(code, start)
                 if df.empty:
                     # Try Yahoo finance ticker format if needed, but FDR acts smart usually
-                    raise ValueError("Empty data")
+                    raise ValueError(f"Empty data returned for {code}")
                 
                 last_row = df.iloc[-1]
                 # If only 1 row, prev is same (0 change)
@@ -214,7 +219,7 @@ def get_price(code: str):
                 }
             except Exception as UsEx:
                 print(f"US Stock fetch error for {code}: {UsEx}")
-                raise HTTPException(status_code=404, detail="US Stock data not found")
+                return {"code": code, "price": 0, "rate": 0, "change": "0", "error": str(UsEx)} # Return 0 with error details instead of crashing
 
         else:
             # KR Stock Logic via Naver
@@ -230,7 +235,8 @@ def get_price(code: str):
             
             no_today = soup.select_one('.no_today')
             if not no_today:
-                 raise HTTPException(status_code=404, detail="Stock data not found or blocked")
+                 # Ensure we don't crash, just return 0
+                 return {"code": code, "price": 0, "rate": 0, "change": "0", "error": "KR Data parse fail"}
                  
             price_span = no_today.select_one('.blind')
             price_text = price_span.get_text(strip=True).replace(',', '')
@@ -263,7 +269,101 @@ def get_price(code: str):
 
     except Exception as e:
         print(f"Error fetching price for {code}: {e}")
+        # Return graceful error JSON
+        return {"code": code, "price": 0, "rate": 0, "change": "0", "error": str(e)}
+
+# --- History / Snapshot Logic ---
+
+class SnapshotRequest(BaseModel):
+    user_id: str
+    total_current: float
+    total_invested: float
+
+@app.post("/history/snapshot")
+def save_snapshot(req: SnapshotRequest):
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    
+    try:
+        daily_return = req.total_current - req.total_invested
+        daily_return_rate = 0
+        if req.total_invested > 0:
+            daily_return_rate = (daily_return / req.total_invested) * 100
+        
+        # Upsert for today (assuming unique constraint on user_id, date)
+        # Supabase upsert requires the dictionary to match columns
+        data = {
+            "user_id": req.user_id,
+            "total_current_value": req.total_current,
+            "total_invested_value": req.total_invested,
+            "daily_return": daily_return,
+            "daily_return_rate": daily_return_rate,
+            # date defaults to CURRENT_DATE in DB, but for upsert conflict resolution we might need it explicit?
+            # Actually, if we don't provide date, it defaults to today. 
+            # If we rely on default, we might duplicate if we run it multiple times?
+            # No, because UNIQUE(user_id, date).
+            # But to trigger upsert (on conflict update), we usually need to specify the conflict target.
+            # Let's try explicit date python side to be sure.
+             "date": datetime.date.today().isoformat()
+        }
+        
+        response = supabase.table("portfolio_history").upsert(data, on_conflict="user_id, date").execute()
+        return {"status": "success", "data": data}
+
+    except Exception as e:
+        print(f"Snapshot error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/history/{user_id}")
+def get_history(user_id: str, range: str = "ALL"):
+    if not supabase:
+        return []
+    
+    try:
+        query = supabase.table("portfolio_history").select("*").eq("user_id", user_id).order("date")
+        
+        # Simple date filtering logic
+        today = datetime.date.today()
+        start_date = None
+        
+        if range == "1W":
+            start_date = today - datetime.timedelta(weeks=1)
+        elif range == "1M":
+            start_date = today - datetime.timedelta(days=30)
+        elif range == "3M":
+            start_date = today - datetime.timedelta(days=90)
+        elif range == "1Y":
+            start_date = today - datetime.timedelta(days=365)
+            
+        if start_date:
+            query = query.gte("date", start_date.isoformat())
+            
+        response = query.execute()
+        return response.data
+        
+    except Exception as e:
+        print(f"History fetch error: {e}")
+        return []
+
+@app.get("/debug/price/{code}")
+def debug_price(code: str):
+    try:
+        market = 'UNKNOWN'
+        found_info = "Not found in df_stocks"
+        if not df_stocks.empty:
+            found = df_stocks[df_stocks['Code'] == code]
+            if not found.empty:
+                market = found.iloc[0]['market']
+                found_info = found.iloc[0].to_dict()
+        
+        return {
+            "code": code,
+            "detected_market": market,
+            "df_stocks_size": len(df_stocks),
+            "found_info": str(found_info)
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

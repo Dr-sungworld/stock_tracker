@@ -20,10 +20,77 @@ interface StockData extends Stock {
   error?: boolean;
 }
 
+
 export default function Home() {
   const [user, setUser] = useState<string>('');
   const [tempUser, setTempUser] = useState('');
   const [holdings, setHoldings] = useState<Stock[]>([]);
+  // ... (existing state)
+
+  // Snapshot Logic
+  const triggerSnapshot = async () => {
+    // Calculate Totals based on Current Data
+    // We need to match stocksData with holdings to get latest price
+    let totalCurrent = 0;
+    let totalInvested = 0;
+
+    // Use stocksData if available (it has current prices)
+    // But stocksData depends on filteredData? No, stocksData is all fetched.
+    // Wait, stocksData might be incomplete if we haven't fetched everything.
+    // But usually we fetch all holdings on load.
+
+    // Recalculate totals from stocksData which merges holding info
+    // Actually, we can just use the same logic as the Summary section?
+    // The Summary logic filters by Tab, but Snapshot should be GLOBAL (Total Portfolio).
+
+    // Let's iterate over ALL stocksData (which represents all holdings populated with price)
+    stocksData.forEach(stock => {
+      const qty = stock.quantity || 1;
+      const current = stock.currentPrice || stock.buyPrice; // Fallback? No, if 0 it's 0.
+      const invested = stock.buyPrice * qty;
+
+      if (stock.currentPrice) {
+        totalCurrent += stock.currentPrice * qty;
+      } else {
+        // If price not loaded, do we assume 0 or buyPrice?
+        // Safest is to NOT snapshot if data is missing.
+        // But for now let's assume if it's missing, it counts as 0 or we skip snapshot.
+        // Let's use 0 current value for missing price stocks to reflect "unknown".
+      }
+      totalInvested += invested;
+    });
+
+    if (totalInvested === 0) return; // Empty portfolio or logic error
+
+    try {
+      await axios.post(`${API_URL}/history/snapshot`, {
+        user_id: user,
+        total_current: totalCurrent,
+        total_invested: totalInvested
+      });
+      console.log("Snapshot saved");
+    } catch (e) {
+      console.error("Snapshot failed", e);
+    }
+  };
+
+  const handleManualSave = async () => {
+    setIsSaving(true);
+    try {
+      await axios.post(`${API_URL}/holdings/${user}`, { holdings });
+
+      // Trigger History Snapshot
+      await triggerSnapshot();
+
+      alert('저장되었습니다. (Saved)');
+    } catch (e) {
+      alert('저장 실패 (Save Failed)');
+      console.error(e);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const [stocksData, setStocksData] = useState<StockData[]>([]);
 
   // Search State
@@ -89,20 +156,7 @@ export default function Home() {
     fetchHoldings();
   }, [user]);
 
-  // Manual Save to Backend (Per User)
-  const handleManualSave = async () => {
-    if (!user || !isLoaded) return;
-    setIsSaving(true);
-    try {
-      await axios.post(`${API_URL}/holdings/${encodeURIComponent(user)}`, { holdings });
-      alert("데이터가 성공적으로 저장되었습니다. (Data Saved)");
-    } catch (e) {
-      console.error("Failed to save stocks", e);
-      alert("저장 실패 (Save Failed)");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+
 
   // Fetch prices when holdings change or manually refreshed
   useEffect(() => {
@@ -305,6 +359,7 @@ export default function Home() {
 
   return (
     <main className="container">
+      <HistoryChart userId={user} />
       <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
           <h1>Stock Tracker</h1>
