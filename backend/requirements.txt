@@ -7,3 +7,4 @@ beautifulsoup4
 pandas
 finance-datareader
 lxml
+httpx[http2]
