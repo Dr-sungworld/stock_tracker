@@ -35,6 +35,7 @@ export default function Home() {
 
   // Tab State
   const [currentTab, setCurrentTab] = useState<'KR' | 'US'>('KR');
+  const [isLoaded, setIsLoaded] = useState(false); // Guard against overwriting DB
 
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -58,6 +59,7 @@ export default function Home() {
     setUser('');
     setHoldings([]);
     setStocksData([]);
+    setIsLoaded(false); // Reset load state
     localStorage.removeItem('stock-tracker-user');
   };
 
@@ -75,6 +77,8 @@ export default function Home() {
       } catch (e) {
         console.error("Failed to load stocks from server", e);
         setHoldings([]);
+      } finally {
+        setIsLoaded(true); // Mark as loaded regardless of success/fail to allow adding new
       }
     };
     fetchHoldings();
@@ -82,19 +86,18 @@ export default function Home() {
 
   // Save to Backend (Per User)
   useEffect(() => {
-    if (!user) return;
-    if (holdings.length >= 0) {
-      const saveHoldings = async () => {
-        try {
-          await axios.post(`${API_URL}/holdings/${encodeURIComponent(user)}`, { holdings });
-        } catch (e) {
-          console.error("Failed to save stocks", e);
-        }
-      };
-      const timeout = setTimeout(saveHoldings, 500);
-      return () => clearTimeout(timeout);
-    }
-  }, [holdings, user]);
+    if (!user || !isLoaded) return; // Wait for initial load
+
+    const saveHoldings = async () => {
+      try {
+        await axios.post(`${API_URL}/holdings/${encodeURIComponent(user)}`, { holdings });
+      } catch (e) {
+        console.error("Failed to save stocks", e);
+      }
+    };
+    const timeout = setTimeout(saveHoldings, 500);
+    return () => clearTimeout(timeout);
+  }, [holdings, user, isLoaded]);
 
   // Fetch prices when holdings change or manually refreshed
   useEffect(() => {
