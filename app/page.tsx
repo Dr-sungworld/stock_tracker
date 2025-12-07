@@ -497,14 +497,19 @@ export default function Home() {
               <div>
                 <h3 style={{ margin: '0 0 0.2rem 0' }}>{stock.name}</h3>
                 <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                  {stock.code} <span style={{ marginLeft: '5px', color: '#aaa' }}>x {qty}</span>
+                  {stock.code}
                 </div>
               </div>
 
-              <div className="text-right" style={{ flex: 1, display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#888' }}>매입가 (Avg)</div>
+              <div className="text-right" style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '1rem' }}>
+                <div style={{ textAlign: 'right', minWidth: '70px' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#888' }}>매입가</div>
                   <div>{formatCurrency(stock.buyPrice)}</div>
+                </div>
+
+                <div style={{ textAlign: 'right', minWidth: '40px' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#888' }}>수량</div>
+                  <div>{qty}</div>
                 </div>
 
                 <div style={{ textAlign: 'right' }}>
