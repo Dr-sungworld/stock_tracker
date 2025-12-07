@@ -316,198 +316,195 @@ export default function Home() {
           >
             해외 주식 (US)
           </button>
+
+        </div>
+
+        {/* Manual Save Button */}
+        <div style={{ textAlign: 'right', marginBottom: '1rem' }}>
+          <button
+            onClick={handleManualSave}
+            disabled={isSaving}
+            className="btn-primary"
+            style={{
+              background: isSaving ? '#888' : '#2196F3',
+              padding: '0.5rem 1.5rem',
+              fontSize: '0.9rem'
             }}
           >
-          해외 주식 (US)
-        </button>
-      </div>
+            {isSaving ? 'Saving...' : '현재 상태 저장 (Save)'}
+          </button>
+        </div>
 
-      {/* Manual Save Button */}
-      <div style={{ textAlign: 'right', marginBottom: '1rem' }}>
-        <button
-          onClick={handleManualSave}
-          disabled={isSaving}
-          className="btn-primary"
-          style={{
-            background: isSaving ? '#888' : '#2196F3',
-            padding: '0.5rem 1.5rem',
-            fontSize: '0.9rem'
-          }}
-        >
-          {isSaving ? 'Saving...' : '현재 상태 저장 (Save)'}
-        </button>
-      </div>
-
-      {/* Input Section */}
-      <div className="input-group">
-        {/* Input fields same as before, logic uses currentTab indirectly? 
+        {/* Input Section */}
+        <div className="input-group">
+          {/* Input fields same as before, logic uses currentTab indirectly? 
                 Actually, the user searches and ADDS. 
                 If they search a US stock while on KR tab, should we switch tab? 
                 Or just add it and it appears on the US tab? 
                 Better: Show market in suggestion and let user know. 
             */}
-        <div style={{ flex: 1, position: 'relative' }} ref={wrapperRef}>
+          <div style={{ flex: 1, position: 'relative' }} ref={wrapperRef}>
+            <input
+              type="text"
+              placeholder="종목명 (Search...)"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                if (selectedStock && e.target.value !== selectedStock.name) {
+                  setSelectedStock(null);
+                }
+              }}
+              onKeyDown={handleKeyDown}
+            />
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="suggestions">
+                {suggestions.map((s, idx) => (
+                  <div
+                    key={idx}
+                    className={`suggestion-item ${idx === activeIndex ? 'active' : ''}`}
+                    onMouseDown={(e) => {
+                      e.preventDefault(); // Prevent input blur
+                      handleSelectStock(s);
+                    }}
+                    onTouchStart={(e) => {
+                      e.preventDefault();
+                      handleSelectStock(s);
+                    }}
+                  >
+                    {s.name}
+                    <span style={{ fontSize: '0.8em', color: '#888', marginLeft: '0.5rem' }}>
+                      {s.code}
+                      {s.market && <span style={{ marginLeft: '4px', padding: '2px 4px', borderRadius: '4px', background: s.market === 'US' ? '#2962FF' : '#00C853', color: 'white', fontSize: '10px' }}>{s.market}</span>}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <input
-            type="text"
-            placeholder="종목명 (Search...)"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              if (selectedStock && e.target.value !== selectedStock.name) {
-                setSelectedStock(null);
-              }
-            }}
-            onKeyDown={handleKeyDown}
+            type="number"
+            placeholder={currentTab === 'KR' ? "매입가 (원)" : "매입가 ($)"}
+            value={buyPriceInput}
+            onChange={(e) => setBuyPriceInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddStock()}
+            style={{ width: '150px' }}
+            className="mobile-full"
+            step={currentTab === 'US' ? "0.01" : "1"}
           />
-          {showSuggestions && suggestions.length > 0 && (
-            <div className="suggestions">
-              {suggestions.map((s, idx) => (
-                <div
-                  key={idx}
-                  className={`suggestion-item ${idx === activeIndex ? 'active' : ''}`}
-                  onMouseDown={(e) => {
-                    e.preventDefault(); // Prevent input blur
-                    handleSelectStock(s);
-                  }}
-                  onTouchStart={(e) => {
-                    e.preventDefault();
-                    handleSelectStock(s);
-                  }}
-                >
-                  {s.name}
-                  <span style={{ fontSize: '0.8em', color: '#888', marginLeft: '0.5rem' }}>
-                    {s.code}
-                    {s.market && <span style={{ marginLeft: '4px', padding: '2px 4px', borderRadius: '4px', background: s.market === 'US' ? '#2962FF' : '#00C853', color: 'white', fontSize: '10px' }}>{s.market}</span>}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <input
-          type="number"
-          placeholder={currentTab === 'KR' ? "매입가 (원)" : "매입가 ($)"}
-          value={buyPriceInput}
-          onChange={(e) => setBuyPriceInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleAddStock()}
-          style={{ width: '150px' }}
-          className="mobile-full"
-          step={currentTab === 'US' ? "0.01" : "1"}
-        />
-        <button className="btn-primary mobile-full" onClick={handleAddStock}>
-          추가
-        </button>
-      </div>
-    </div>
-
-      {/* Summary Section */ }
-  {
-    filteredData.length > 0 && (
-      <div className="glass-panel summary-panel" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
-        <div>
-          <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>총 매입금액</div>
-          <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{formatCurrency(totalInvested)}</div>
-        </div>
-        <div>
-          <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>총 평가금액</div>
-          <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{formatCurrency(totalCurrent)}</div>
-        </div>
-        <div className="text-right">
-          <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>수익률</div>
-          <div style={{
-            fontSize: '1.5rem',
-            fontWeight: 'bold',
-            color: totalRate > 0 ? 'var(--up-color)' : (totalRate < 0 ? 'var(--down-color)' : 'white')
-          }}>
-            {totalRate > 0 ? '+' : ''}{totalRate.toFixed(2)}%
-          </div>
-          <div style={{
-            fontSize: '0.9rem',
-            color: totalReturn > 0 ? 'var(--up-color)' : (totalReturn < 0 ? 'var(--down-color)' : 'white')
-          }}>
-            {totalReturn > 0 ? '+' : ''}{formatCurrency(totalReturn)}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  {/* List Section */ }
-  <div style={{ display: 'grid', gap: '1rem' }}>
-    {filteredData.map((stock, i) => {
-      const isProfit = (stock.rate || 0) > 0;
-      const isLoss = (stock.rate || 0) < 0;
-      const rateColor = isProfit ? 'var(--up-color)' : (isLoss ? 'var(--down-color)' : 'white');
-
-      // ROI Calculation
-      const stockReturn = (stock.currentPrice || 0) - stock.buyPrice;
-      const stockRoi = stock.buyPrice > 0 ? (stockReturn / stock.buyPrice) * 100 : 0;
-      const roiColor = stockRoi > 0 ? 'var(--up-color)' : (stockRoi < 0 ? 'var(--down-color)' : 'white');
-
-      return (
-        <div key={i} className="glass-panel card flex-between">
-          <div>
-            <h3 style={{ margin: '0 0 0.2rem 0' }}>{stock.name}</h3>
-            <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{stock.code}</div>
-          </div>
-
-          <div className="text-right" style={{ flex: 1, display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '0.8rem', color: '#888' }}>매입가</div>
-              <div>{formatCurrency(stock.buyPrice)}</div>
-            </div>
-
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '0.8rem', color: '#888' }}>현재가</div>
-              <div style={{ fontWeight: 'bold', color: rateColor }}>
-                {stock.currentPrice ? formatCurrency(stock.currentPrice) : 'Loading...'}
-              </div>
-            </div>
-
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '0.8rem', color: '#888' }}>수익률</div>
-              <div style={{ fontWeight: 'bold', color: roiColor }}>
-                {stockRoi > 0 ? '+' : ''}{stockRoi.toFixed(2)}%
-                <span style={{ fontSize: '0.8rem', marginLeft: '5px', color: roiColor }}>
-                  ({stockReturn > 0 ? '+' : ''}{formatCurrency(stockReturn)})
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <button
-            onClick={() => handleRemoveStock(stock.code)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#ff5252',
-              cursor: 'pointer',
-              fontSize: '1.2rem',
-              marginLeft: '1rem'
-            }}
-          >
-            ×
+          <button className="btn-primary mobile-full" onClick={handleAddStock}>
+            추가
           </button>
         </div>
-      );
-    })}
-  </div>
-  {
-    stocksData.length === 0 && (
-      <div style={{ textAlign: 'center', padding: '3rem', color: '#666' }}>
-        보유한 종목을 추가해주세요.
-        <br /><br />
-        {user && (
-          <div style={{ fontSize: '0.8rem', color: '#aaa', marginTop: '20px', padding: '10px', borderTop: '1px solid #eee' }}>
-            Debug Info:<br />
-            User: {user}<br />
-            Holdings: {holdings.length}<br />
-            API: {API_URL}
-          </div>
-        )}
       </div>
-    )
-  }
+
+      {/* Summary Section */}
+      {
+        filteredData.length > 0 && (
+          <div className="glass-panel summary-panel" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
+            <div>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>총 매입금액</div>
+              <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{formatCurrency(totalInvested)}</div>
+            </div>
+            <div>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>총 평가금액</div>
+              <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{formatCurrency(totalCurrent)}</div>
+            </div>
+            <div className="text-right">
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>수익률</div>
+              <div style={{
+                fontSize: '1.5rem',
+                fontWeight: 'bold',
+                color: totalRate > 0 ? 'var(--up-color)' : (totalRate < 0 ? 'var(--down-color)' : 'white')
+              }}>
+                {totalRate > 0 ? '+' : ''}{totalRate.toFixed(2)}%
+              </div>
+              <div style={{
+                fontSize: '0.9rem',
+                color: totalReturn > 0 ? 'var(--up-color)' : (totalReturn < 0 ? 'var(--down-color)' : 'white')
+              }}>
+                {totalReturn > 0 ? '+' : ''}{formatCurrency(totalReturn)}
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {/* List Section */}
+      <div style={{ display: 'grid', gap: '1rem' }}>
+        {filteredData.map((stock, i) => {
+          const isProfit = (stock.rate || 0) > 0;
+          const isLoss = (stock.rate || 0) < 0;
+          const rateColor = isProfit ? 'var(--up-color)' : (isLoss ? 'var(--down-color)' : 'white');
+
+          // ROI Calculation
+          const stockReturn = (stock.currentPrice || 0) - stock.buyPrice;
+          const stockRoi = stock.buyPrice > 0 ? (stockReturn / stock.buyPrice) * 100 : 0;
+          const roiColor = stockRoi > 0 ? 'var(--up-color)' : (stockRoi < 0 ? 'var(--down-color)' : 'white');
+
+          return (
+            <div key={i} className="glass-panel card flex-between">
+              <div>
+                <h3 style={{ margin: '0 0 0.2rem 0' }}>{stock.name}</h3>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{stock.code}</div>
+              </div>
+
+              <div className="text-right" style={{ flex: 1, display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#888' }}>매입가</div>
+                  <div>{formatCurrency(stock.buyPrice)}</div>
+                </div>
+
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#888' }}>현재가</div>
+                  <div style={{ fontWeight: 'bold', color: rateColor }}>
+                    {stock.currentPrice ? formatCurrency(stock.currentPrice) : 'Loading...'}
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#888' }}>수익률</div>
+                  <div style={{ fontWeight: 'bold', color: roiColor }}>
+                    {stockRoi > 0 ? '+' : ''}{stockRoi.toFixed(2)}%
+                    <span style={{ fontSize: '0.8rem', marginLeft: '5px', color: roiColor }}>
+                      ({stockReturn > 0 ? '+' : ''}{formatCurrency(stockReturn)})
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => handleRemoveStock(stock.code)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#ff5252',
+                  cursor: 'pointer',
+                  fontSize: '1.2rem',
+                  marginLeft: '1rem'
+                }}
+              >
+                ×
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      {
+        stocksData.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '3rem', color: '#666' }}>
+            보유한 종목을 추가해주세요.
+            <br /><br />
+            {user && (
+              <div style={{ fontSize: '0.8rem', color: '#aaa', marginTop: '20px', padding: '10px', borderTop: '1px solid #eee' }}>
+                Debug Info:<br />
+                User: {user}<br />
+                Holdings: {holdings.length}<br />
+                API: {API_URL}
+              </div>
+            )}
+          </div>
+        )
+      }
     </main >
   );
 }
