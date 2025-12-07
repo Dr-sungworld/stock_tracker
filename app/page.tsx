@@ -343,6 +343,10 @@ export default function Home() {
                       e.preventDefault(); // Prevent input blur
                       handleSelectStock(s);
                     }}
+                    onTouchStart={(e) => {
+                      e.preventDefault();
+                      handleSelectStock(s);
+                    }}
                   >
                     {s.name}
                     <span style={{ fontSize: '0.8em', color: '#888', marginLeft: '0.5rem' }}>
