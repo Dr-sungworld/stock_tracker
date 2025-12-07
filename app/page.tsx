@@ -339,7 +339,10 @@ export default function Home() {
                   <div
                     key={idx}
                     className={`suggestion-item ${idx === activeIndex ? 'active' : ''}`}
-                    onClick={() => handleSelectStock(s)}
+                    onMouseDown={(e) => {
+                      e.preventDefault(); // Prevent input blur
+                      handleSelectStock(s);
+                    }}
                   >
                     {s.name}
                     <span style={{ fontSize: '0.8em', color: '#888', marginLeft: '0.5rem' }}>
