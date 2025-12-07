@@ -342,17 +342,12 @@ export default function Home() {
         </div>
 
         {/* Input Section */}
-        <div className="input-group">
-          {/* Input fields same as before, logic uses currentTab indirectly? 
-                Actually, the user searches and ADDS. 
-                If they search a US stock while on KR tab, should we switch tab? 
-                Or just add it and it appears on the US tab? 
-                Better: Show market in suggestion and let user know. 
-            */}
-          <div style={{ flex: 1, position: 'relative' }} ref={wrapperRef}>
+        <div className="input-group" style={{ flexDirection: 'column', gap: '1rem' }}>
+          {/* Row 1: Search */}
+          <div style={{ position: 'relative', width: '100%' }} ref={wrapperRef}>
             <input
               type="text"
-              placeholder="종목명 (Search...)"
+              placeholder="종목명 검색 (예: 삼성전자)"
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);
@@ -361,15 +356,16 @@ export default function Home() {
                 }
               }}
               onKeyDown={handleKeyDown}
+              style={{ width: '100%' }}
             />
             {showSuggestions && suggestions.length > 0 && (
-              <div className="suggestions">
+              <div className="suggestions" style={{ top: '100%', left: 0, right: 0 }}>
                 {suggestions.map((s, idx) => (
                   <div
                     key={idx}
                     className={`suggestion-item ${idx === activeIndex ? 'active' : ''}`}
                     onMouseDown={(e) => {
-                      e.preventDefault(); // Prevent input blur
+                      e.preventDefault();
                       handleSelectStock(s);
                     }}
                     onTouchStart={(e) => {
@@ -387,29 +383,39 @@ export default function Home() {
               </div>
             )}
           </div>
-          <input
-            type="number"
-            placeholder={currentTab === 'KR' ? "매입가 (원)" : "매입가 ($)"}
-            value={buyPriceInput}
-            onChange={(e) => setBuyPriceInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAddStock()}
-            style={{ width: '150px' }}
-            className="mobile-full"
-            step={currentTab === 'US' ? "0.01" : "1"}
-          />
-          <input
-            type="number"
-            placeholder="수량"
-            value={quantityInput}
-            onChange={(e) => setQuantityInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAddStock()}
-            style={{ width: '80px' }}
-            className="mobile-full"
-            min="1"
-          />
-          <button className="btn-primary mobile-full" onClick={handleAddStock}>
-            추가
-          </button>
+
+          {/* Row 2: Price / Qty / Add */}
+          <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
+
+            <div style={{ flex: 2 }}>
+              <input
+                type="number"
+                placeholder={currentTab === 'KR' ? "매입가 (원)" : "매입가 ($)"}
+                value={buyPriceInput}
+                onChange={(e) => setBuyPriceInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddStock()}
+                style={{ width: '100%' }}
+                step={currentTab === 'US' ? "0.01" : "1"}
+              />
+            </div>
+
+            <div style={{ flex: 1, position: 'relative' }}>
+              <div style={{ position: 'absolute', top: '-18px', left: '0', fontSize: '0.7rem', color: '#aaa' }}>수량</div>
+              <input
+                type="number"
+                placeholder="수량"
+                value={quantityInput}
+                onChange={(e) => setQuantityInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddStock()}
+                style={{ width: '100%' }}
+                min="1"
+              />
+            </div>
+
+            <button className="btn-primary" onClick={handleAddStock} style={{ flex: 0.8, whiteSpace: 'nowrap' }}>
+              추가
+            </button>
+          </div>
         </div>
       </div>
 
