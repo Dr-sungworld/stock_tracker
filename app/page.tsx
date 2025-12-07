@@ -208,15 +208,39 @@ export default function Home() {
 
     if (isNaN(price) || isNaN(qty) || qty <= 0) return;
 
-    const newStock: Stock = {
-      name: selectedStock.name,
-      code: selectedStock.code,
-      buyPrice: price,
-      quantity: qty,
-      market: (selectedStock.market as 'KR' | 'US') || 'KR'
-    };
+    // Check if stock exists
+    const existingIndex = holdings.findIndex(h => h.code === selectedStock.code);
 
-    setHoldings([...holdings, newStock]);
+    if (existingIndex >= 0) {
+      // Aggregate
+      const existing = holdings[existingIndex];
+      const existingQty = existing.quantity || 1;
+      const existingTotal = existing.buyPrice * existingQty;
+      const newTotal = price * qty;
+
+      const distinctTotalQty = existingQty + qty;
+      const distinctAvgPrice = (existingTotal + newTotal) / distinctTotalQty;
+
+      const updatedStock = {
+        ...existing,
+        buyPrice: distinctAvgPrice,
+        quantity: distinctTotalQty
+      };
+
+      const newHoldings = [...holdings];
+      newHoldings[existingIndex] = updatedStock;
+      setHoldings(newHoldings);
+    } else {
+      // Add New
+      const newStock: Stock = {
+        name: selectedStock.name,
+        code: selectedStock.code,
+        buyPrice: price,
+        quantity: qty,
+        market: (selectedStock.market as 'KR' | 'US') || 'KR'
+      };
+      setHoldings([...holdings, newStock]);
+    }
 
     // Reset
     setQuery('');
@@ -384,22 +408,22 @@ export default function Home() {
             )}
           </div>
 
-          {/* Row 2: Price / Qty / Add */}
-          <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
+          {/* Row 2: Price / Qty / Add - Grid Layout */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.5fr) minmax(0, 1fr) minmax(auto, 0.8fr)', gap: '0.5rem', width: '100%' }}>
 
-            <div style={{ flex: 2 }}>
+            <div>
               <input
                 type="number"
                 placeholder={currentTab === 'KR' ? "매입가 (원)" : "매입가 ($)"}
                 value={buyPriceInput}
                 onChange={(e) => setBuyPriceInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddStock()}
-                style={{ width: '100%' }}
+                style={{ width: '100%', minWidth: 0 }}
                 step={currentTab === 'US' ? "0.01" : "1"}
               />
             </div>
 
-            <div style={{ flex: 1, position: 'relative' }}>
+            <div style={{ position: 'relative' }}>
               <div style={{ position: 'absolute', top: '-18px', left: '0', fontSize: '0.7rem', color: '#aaa' }}>수량</div>
               <input
                 type="number"
@@ -407,12 +431,12 @@ export default function Home() {
                 value={quantityInput}
                 onChange={(e) => setQuantityInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddStock()}
-                style={{ width: '100%' }}
+                style={{ width: '100%', minWidth: 0 }}
                 min="1"
               />
             </div>
 
-            <button className="btn-primary" onClick={handleAddStock} style={{ flex: 0.8, whiteSpace: 'nowrap' }}>
+            <button className="btn-primary" onClick={handleAddStock} style={{ whiteSpace: 'nowrap', padding: '0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               추가
             </button>
           </div>
