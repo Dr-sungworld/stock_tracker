@@ -245,7 +245,6 @@ const HistoryChart: React.FC<Props> = ({ userId, market }) => {
                             <Area
                                 type="monotone"
                                 dataKey={getDataKey()}
-                                stroke={metric === 'value' ? "#2196F3" : "#888"}
                                 fill={metric === 'value' ? "rgba(33, 150, 243, 0.3)" : "url(#splitColor)"}
                                 stroke={metric === 'value' ? "#2196F3" : "url(#splitColor)"}
                                 strokeWidth={2}
