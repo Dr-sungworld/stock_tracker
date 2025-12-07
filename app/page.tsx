@@ -464,9 +464,18 @@ export default function Home() {
         stocksData.length === 0 && (
           <div style={{ textAlign: 'center', padding: '3rem', color: '#666' }}>
             보유한 종목을 추가해주세요.
+            <br /><br />
+            {user && (
+              <div style={{ fontSize: '0.8rem', color: '#aaa', marginTop: '20px', padding: '10px', borderTop: '1px solid #eee' }}>
+                Debug Info:<br />
+                User: {user}<br />
+                Holdings: {holdings.length}<br />
+                API: {API_URL}
+              </div>
+            )}
           </div>
         )
       }
-    </main >
+    </main>
   );
 }
