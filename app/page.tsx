@@ -224,7 +224,7 @@ export default function Home() {
             ...stock,
             loading: false,
             error: true,
-            currentPrice: stock.currentPrice || stock.buyPrice, // Fallback
+            currentPrice: stock.buyPrice, // Fallback on error
           };
         }
       });
