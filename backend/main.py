@@ -27,7 +27,7 @@ if SUPABASE_URL and SUPABASE_KEY:
     except Exception as e:
         print(f"Failed to initialize Supabase: {e}")
 
-# ... (Global df_stocks and lifespan remain similar, but we might verify connection in lifespan)
+# ... (Global df_stocks and lifespan)
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
         
         # Load US Stocks (Major Exchanges)
         print("Loading US stocks (this may take a moment)...")
-        # Optimization: Load only necessary or cache. For now, load fully.
+        # Optimization: Load only necessary or cache.
         df_nasdaq = fdr.StockListing('NASDAQ')
         df_nyse = fdr.StockListing('NYSE')
         df_amex = fdr.StockListing('AMEX')
@@ -69,6 +69,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 class StockItem(BaseModel):
     name: str
     code: str
@@ -79,6 +80,15 @@ class SearchResponse(BaseModel):
 
 class HoldingsRequest(BaseModel):
     holdings: List[dict]
+
+class SnapshotRequest(BaseModel):
+    user_id: str
+    total_current: float
+    total_invested: float
+    kr_current: Optional[float] = 0.0
+    kr_invested: Optional[float] = 0.0
+    us_current: Optional[float] = 0.0
+    us_invested: Optional[float] = 0.0
 
 
 def load_holdings(user_id: str):
@@ -95,7 +105,7 @@ def load_holdings(user_id: str):
             data.append({
                 "name": row['name'],
                 "code": row['code'],
-                "market": row['market'],
+                "market": row.get('market', 'KR'), # Safe get
                 "buyPrice": float(row['buy_price']),
                 "quantity": int(row.get('quantity', 1) or 1) # Default to 1
             })
@@ -110,25 +120,49 @@ def save_holdings(user_id: str, holdings):
         return
 
     try:
-        # Strategy: Delete all for user, then re-insert. (Transaction ideal but simple batch works for personal app)
+        # Strategy: Delete all for user, then re-insert. 
+        # WARNING: This is risky if insert fails.
+        # Ideally we check schema or use upsert. 
+        # For now, we implement fallback on insert failure to restore data (or at least try to save without new cols).
+        
+        # We can't easily "restore" the deleted data if insert fails unless we kept it in memory (we verify req.holdings has it).
+        
+        # 1. Delete
         supabase.table('holdings').delete().eq('user_id', user_id).execute()
         
         if not holdings:
             return
 
-        # Prepare for DB
-        db_rows = []
+        # 2. Prepare for DB (With Market)
+        db_rows_full = []
+        db_rows_fallback = []
+        
         for h in holdings:
-            db_rows.append({
+            base = {
                 "user_id": user_id,
                 "name": h.get("name"),
                 "code": h.get("code"),
-                "market": h.get("market", "KR"),
                 "buy_price": h.get("buyPrice", 0),
                 "quantity": h.get("quantity", 1)
-            })
+            }
+            # Full version
+            full = base.copy()
+            full["market"] = h.get("market", "KR")
+            db_rows_full.append(full)
             
-        supabase.table('holdings').insert(db_rows).execute()
+            # Fallback version
+            db_rows_fallback.append(base)
+            
+        try:
+            supabase.table('holdings').insert(db_rows_full).execute()
+        except Exception as e_full:
+            print(f"Insert with market failed (schema mismatch?): {e_full}. Retrying without market column...")
+            try:
+                supabase.table('holdings').insert(db_rows_fallback).execute()
+            except Exception as e_fallback:
+                 print(f"CRITICAL: Fallback insert also failed: {e_fallback}. Data for {user_id} might be lost from DB but exists in payload.")
+                 # In a real app we would raise 500 here so client knows save failed.
+                 raise e_fallback
         
     except Exception as e:
         print(f"Error saving holdings to Supabase: {e}")
@@ -173,6 +207,24 @@ def search_stock(q: str):
         print(f"Error searching: {e}")
         return {"items": []}
 
+@app.get("/exchange-rate")
+def get_exchange_rate():
+    try:
+        # Use FinanceDataReader for USD/KRW
+        # Symbol is 'USD/KRW'
+        today = datetime.datetime.now()
+        start = today - datetime.timedelta(days=7) 
+        df = fdr.DataReader('USD/KRW', start)
+        
+        if df.empty:
+            return {"rate": 1400.0, "error": "No data"}
+            
+        rate = float(df.iloc[-1]['Close'])
+        return {"rate": rate}
+    except Exception as e:
+        print(f"Exchange rate error: {e}")
+        return {"rate": 1400.0, "error": str(e)}
+
 @app.get("/price")
 def get_price(code: str):
     if not code:
@@ -186,7 +238,7 @@ def get_price(code: str):
             if not found.empty:
                 market = found.iloc[0]['market']
         
-        print(f"DEBUG: Code={code}, Market={market}") # Debug Print
+        # print(f"DEBUG: Code={code}, Market={market}") 
 
         if market == 'US':
             # US Stock Logic via FDR
@@ -197,7 +249,6 @@ def get_price(code: str):
                 
                 df = fdr.DataReader(code, start)
                 if df.empty:
-                    # Try Yahoo finance ticker format if needed, but FDR acts smart usually
                     raise ValueError(f"Empty data returned for {code}")
                 
                 last_row = df.iloc[-1]
@@ -219,7 +270,7 @@ def get_price(code: str):
                 }
             except Exception as UsEx:
                 print(f"US Stock fetch error for {code}: {UsEx}")
-                return {"code": code, "price": 0, "rate": 0, "change": "0", "error": str(UsEx)} # Return 0 with error details instead of crashing
+                return {"code": code, "price": 0, "rate": 0, "change": "0", "error": str(UsEx)} 
 
         else:
             # KR Stock Logic via Naver
@@ -235,7 +286,6 @@ def get_price(code: str):
             
             no_today = soup.select_one('.no_today')
             if not no_today:
-                 # Ensure we don't crash, just return 0
                  return {"code": code, "price": 0, "rate": 0, "change": "0", "error": "KR Data parse fail"}
                  
             price_span = no_today.select_one('.blind')
@@ -269,15 +319,7 @@ def get_price(code: str):
 
     except Exception as e:
         print(f"Error fetching price for {code}: {e}")
-        # Return graceful error JSON
         return {"code": code, "price": 0, "rate": 0, "change": "0", "error": str(e)}
-
-# --- History / Snapshot Logic ---
-
-class SnapshotRequest(BaseModel):
-    user_id: str
-    total_current: float
-    total_invested: float
 
 @app.post("/history/snapshot")
 def save_snapshot(req: SnapshotRequest):
@@ -290,80 +332,103 @@ def save_snapshot(req: SnapshotRequest):
         if req.total_invested > 0:
             daily_return_rate = (daily_return / req.total_invested) * 100
         
-        # Upsert for today (assuming unique constraint on user_id, date)
-        # Supabase upsert requires the dictionary to match columns
+        # Check recent snapshot (1 hr check)
+        # Note: logic simplified for robustness
+        should_update = False
+        update_id = None
+        
+        last_record_resp = supabase.table("portfolio_history")\
+            .select("id, created_at")\
+            .eq("user_id", req.user_id)\
+            .order("created_at", desc=True)\
+            .limit(1)\
+            .execute()
+            
+        if last_record_resp.data:
+            last = last_record_resp.data[0]
+            try:
+                last_time_str = last['created_at'].replace('Z', '+00:00')
+                last_time = datetime.datetime.fromisoformat(last_time_str)
+                now = datetime.datetime.now(datetime.timezone.utc)
+                diff = (now - last_time).total_seconds()
+                if diff < 3600:
+                    should_update = True
+                    update_id = last['id']
+            except:
+                pass
+
         data = {
             "user_id": req.user_id,
             "total_current_value": req.total_current,
             "total_invested_value": req.total_invested,
             "daily_return": daily_return,
             "daily_return_rate": daily_return_rate,
-            # date defaults to CURRENT_DATE in DB, but for upsert conflict resolution we might need it explicit?
-            # Actually, if we don't provide date, it defaults to today. 
-            # If we rely on default, we might duplicate if we run it multiple times?
-            # No, because UNIQUE(user_id, date).
-            # But to trigger upsert (on conflict update), we usually need to specify the conflict target.
-            # Let's try explicit date python side to be sure.
-             "date": datetime.date.today().isoformat()
+            "kr_current_value": req.kr_current,
+            "kr_invested_value": req.kr_invested,
+            "us_current_value": req.us_current,
+            "us_invested_value": req.us_invested,
+            "date": datetime.date.today().isoformat()
         }
         
-        response = supabase.table("portfolio_history").upsert(data, on_conflict="user_id, date").execute()
-        return {"status": "success", "data": data}
+        if should_update and update_id:
+            supabase.table("portfolio_history").update(data).eq("id", update_id).execute()
+        else:
+            supabase.table("portfolio_history").insert(data).execute()
+            
+        return {"status": "success", "action": "update" if should_update else "insert"}
 
     except Exception as e:
         print(f"Snapshot error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"status": "error", "message": str(e)}
 
 @app.get("/history/{user_id}")
-def get_history(user_id: str, range: str = "ALL"):
+def get_history(user_id: str, range: str = '1M'):
     if not supabase:
         return []
-    
+
     try:
-        query = supabase.table("portfolio_history").select("*").eq("user_id", user_id).order("date")
-        
-        # Simple date filtering logic
+        # Determine date filter
         today = datetime.date.today()
-        start_date = None
+        start_date = today
         
-        if range == "1W":
-            start_date = today - datetime.timedelta(weeks=1)
-        elif range == "1M":
+        if range == '1W':
+            start_date = today - datetime.timedelta(days=7)
+        elif range == '1M':
             start_date = today - datetime.timedelta(days=30)
-        elif range == "3M":
+        elif range == '3M':
             start_date = today - datetime.timedelta(days=90)
-        elif range == "1Y":
+        elif range == '1Y':
             start_date = today - datetime.timedelta(days=365)
+        else:
+            start_date = today - datetime.timedelta(days=365*10) # 'ALL'
+
+        response = supabase.table("portfolio_history")\
+            .select("created_at, date, total_current_value, total_invested_value, daily_return, daily_return_rate, kr_current_value, us_current_value, kr_invested_value, us_invested_value")\
+            .eq("user_id", user_id)\
+            .gte("date", start_date.isoformat())\
+            .order("created_at", desc=False)\
+            .execute()
             
-        if start_date:
-            query = query.gte("date", start_date.isoformat())
+        # Calculate returns for each row
+        results = []
+        for row in response.data:
+            item = row.copy()
+            # Calculate Split Returns if data exists
+            if item.get('kr_current_value') is not None and item.get('kr_invested_value') is not None:
+                item['kr_return'] = item['kr_current_value'] - item['kr_invested_value']
+                item['kr_rate'] = (item['kr_return'] / item['kr_invested_value'] * 100) if item['kr_invested_value'] > 0 else 0
             
-        response = query.execute()
-        return response.data
-        
+            if item.get('us_current_value') is not None and item.get('us_invested_value') is not None:
+                item['us_return'] = item['us_current_value'] - item['us_invested_value']
+                item['us_rate'] = (item['us_return'] / item['us_invested_value'] * 100) if item['us_invested_value'] > 0 else 0
+                
+            results.append(item)
+            
+        return results
+
     except Exception as e:
         print(f"History fetch error: {e}")
         return []
-
-@app.get("/debug/price/{code}")
-def debug_price(code: str):
-    try:
-        market = 'UNKNOWN'
-        found_info = "Not found in df_stocks"
-        if not df_stocks.empty:
-            found = df_stocks[df_stocks['Code'] == code]
-            if not found.empty:
-                market = found.iloc[0]['market']
-                found_info = found.iloc[0].to_dict()
-        
-        return {
-            "code": code,
-            "detected_market": market,
-            "df_stocks_size": len(df_stocks),
-            "found_info": str(found_info)
-        }
-    except Exception as e:
-        return {"error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

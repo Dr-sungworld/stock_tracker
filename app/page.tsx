@@ -2,6 +2,7 @@
 
 import axios from 'axios';
 import { useEffect, useRef, useState } from 'react';
+import HistoryChart from './components/HistoryChart';
 import API_URL from './config';
 
 interface Stock {
@@ -28,47 +29,59 @@ export default function Home() {
   // ... (existing state)
 
   // Snapshot Logic
+  // Snapshot Logic
   const triggerSnapshot = async () => {
-    // Calculate Totals based on Current Data
-    // We need to match stocksData with holdings to get latest price
+    if (!user) return;
+
+    // Calculate Totals based on Current Data (Global & Split)
     let totalCurrent = 0;
     let totalInvested = 0;
 
-    // Use stocksData if available (it has current prices)
-    // But stocksData depends on filteredData? No, stocksData is all fetched.
-    // Wait, stocksData might be incomplete if we haven't fetched everything.
-    // But usually we fetch all holdings on load.
+    let krCurrent = 0;
+    let krInvested = 0;
 
-    // Recalculate totals from stocksData which merges holding info
-    // Actually, we can just use the same logic as the Summary section?
-    // The Summary logic filters by Tab, but Snapshot should be GLOBAL (Total Portfolio).
+    let usCurrent = 0;
+    let usInvested = 0;
 
-    // Let's iterate over ALL stocksData (which represents all holdings populated with price)
     stocksData.forEach(stock => {
       const qty = stock.quantity || 1;
-      const current = stock.currentPrice || stock.buyPrice; // Fallback? No, if 0 it's 0.
-      const invested = stock.buyPrice * qty;
+      const isUS = isUSStock(stock.code);
 
-      if (stock.currentPrice) {
-        totalCurrent += stock.currentPrice * qty;
+      const currentValKRW = getPriceInKRW(stock);
+      const investedValKRW = getInvestedInKRW(stock);
+
+      const itemCurrent = currentValKRW * qty;
+      const itemInvested = investedValKRW * qty;
+
+      totalCurrent += itemCurrent;
+      totalInvested += itemInvested;
+
+      if (isUS) {
+        usCurrent += itemCurrent;
+        usInvested += itemInvested;
       } else {
-        // If price not loaded, do we assume 0 or buyPrice?
-        // Safest is to NOT snapshot if data is missing.
-        // But for now let's assume if it's missing, it counts as 0 or we skip snapshot.
-        // Let's use 0 current value for missing price stocks to reflect "unknown".
+        krCurrent += itemCurrent;
+        krInvested += itemInvested;
       }
-      totalInvested += invested;
     });
 
-    if (totalInvested === 0) return; // Empty portfolio or logic error
+    if (totalInvested === 0) {
+      console.warn("Total invested is 0, skipping snapshot");
+      return;
+    }
 
     try {
       await axios.post(`${API_URL}/history/snapshot`, {
         user_id: user,
         total_current: totalCurrent,
-        total_invested: totalInvested
+        total_invested: totalInvested,
+        kr_current: krCurrent,
+        kr_invested: krInvested,
+        us_current: usCurrent,
+        us_invested: usInvested
       });
-      console.log("Snapshot saved");
+      console.log("Snapshot saved. KR:", krCurrent, "US:", usCurrent);
+      // Force chart refresh? It relies on next fetch.
     } catch (e) {
       console.error("Snapshot failed", e);
     }
@@ -105,6 +118,27 @@ export default function Home() {
   // Tab State
   const [currentTab, setCurrentTab] = useState<'KR' | 'US'>('KR');
   const [isLoaded, setIsLoaded] = useState(false); // Guard against overwriting DB
+  const [loading, setLoading] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState<number>(1400); // Default fallback
+
+  const isUSStock = (code: string) => /^[A-Za-z]+$/.test(code);
+
+  const getPriceInKRW = (stock: Stock | StockData) => {
+    // Current Price: If filteredData has currentPrice, use it.
+    // Assuming stock object has currentPrice.
+    const price = (stock as StockData).currentPrice || stock.buyPrice || 0;
+    if (isUSStock(stock.code)) {
+      return price * exchangeRate;
+    }
+    return price;
+  };
+
+  const getInvestedInKRW = (stock: Stock | StockData) => {
+    if (isUSStock(stock.code)) {
+      return stock.buyPrice * exchangeRate;
+    }
+    return stock.buyPrice;
+  };
   const [isSaving, setIsSaving] = useState(false); // Manual save feedback
 
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -161,16 +195,19 @@ export default function Home() {
   // Fetch prices when holdings change or manually refreshed
   useEffect(() => {
     if (!user) return;
+
     const fetchPrices = async () => {
+      // Show loading initially
+      setStocksData(prev =>
+        holdings.map(h => {
+          const existing = prev.find(p => p.code === h.code);
+          return existing ? { ...existing, loading: true } : { ...h, loading: true };
+        })
+      );
+
       const promises = holdings.map(async (stock) => {
         try {
-          // Check if we already have data
-          const existing = stocksData.find(s => s.code === stock.code);
-          if (existing && !existing.error && existing.currentPrice) {
-            // Optimistic update mechanism or just cache - for now always re-fetch on mount/add
-          }
-
-          // Fetch from Python Backend
+          // Check if we already have data? No, let's refresh.
           const res = await axios.get(`${API_URL}/price?code=${stock.code}`);
           const { price, rate, change } = res.data;
           return {
@@ -182,21 +219,15 @@ export default function Home() {
           };
         } catch (err) {
           console.error(err);
+          // Return default/error state
           return {
             ...stock,
             loading: false,
             error: true,
+            currentPrice: stock.currentPrice || stock.buyPrice, // Fallback
           };
         }
       });
-
-      // Show loading initially
-      setStocksData(prev =>
-        holdings.map(h => {
-          const existing = prev.find(p => p.code === h.code);
-          return existing ? { ...existing, loading: true } : { ...h, loading: true };
-        })
-      );
 
       const results = await Promise.all(promises);
       setStocksData(results);
@@ -208,6 +239,8 @@ export default function Home() {
       setStocksData([]);
     }
   }, [holdings, user]);
+
+
 
 
   // Search Typeahead
@@ -326,10 +359,10 @@ export default function Home() {
 
   // Summary Calculation (Global or Per Tab? User requested separation, usually separated summaries are better)
   // Let's do Per Tab Summary
-  const totalInvested = filteredData.reduce((acc, s) => acc + ((s.buyPrice || 0) * (s.quantity || 1)), 0);
-  const totalCurrent = filteredData.reduce((acc, s) => acc + ((s.currentPrice || s.buyPrice || 0) * (s.quantity || 1)), 0);
-  const totalReturn = totalCurrent - totalInvested;
-  const totalRate = totalInvested > 0 ? (totalReturn / totalInvested) * 100 : 0;
+  const totalAsset = filteredData.reduce((acc, stock) => acc + ((stock.currentPrice || stock.buyPrice || 0) * (stock.quantity || 1)), 0);
+  const totalInvest = filteredData.reduce((acc, stock) => acc + ((stock.buyPrice || 0) * (stock.quantity || 1)), 0);
+  const totalProfit = totalAsset - totalInvest;
+  const totalRoi = totalInvest > 0 ? (totalProfit / totalInvest) * 100 : 0;
 
   const currencySymbol = currentTab === 'KR' ? '원' : '$';
   const formatCurrency = (val: number) => {
@@ -359,7 +392,7 @@ export default function Home() {
 
   return (
     <main className="container">
-      <HistoryChart userId={user} />
+      <HistoryChart userId={user} market={currentTab} />
       <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
           <h1>Stock Tracker</h1>
@@ -504,26 +537,26 @@ export default function Home() {
           <div className="glass-panel summary-panel" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
             <div>
               <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>총 매입금액</div>
-              <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{formatCurrency(totalInvested)}</div>
+              <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{formatCurrency(totalInvest)}</div>
             </div>
             <div>
               <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>총 평가금액</div>
-              <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{formatCurrency(totalCurrent)}</div>
+              <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{formatCurrency(totalAsset)}</div>
             </div>
             <div className="text-right">
               <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>수익률</div>
               <div style={{
                 fontSize: '1.5rem',
                 fontWeight: 'bold',
-                color: totalRate > 0 ? 'var(--up-color)' : (totalRate < 0 ? 'var(--down-color)' : 'white')
+                color: totalRoi > 0 ? 'var(--up-color)' : (totalRoi < 0 ? 'var(--down-color)' : 'white')
               }}>
-                {totalRate > 0 ? '+' : ''}{totalRate.toFixed(2)}%
+                {totalRoi > 0 ? '+' : ''}{totalRoi.toFixed(2)}%
               </div>
               <div style={{
                 fontSize: '0.9rem',
-                color: totalReturn > 0 ? 'var(--up-color)' : (totalReturn < 0 ? 'var(--down-color)' : 'white')
+                color: totalProfit > 0 ? 'var(--up-color)' : (totalProfit < 0 ? 'var(--down-color)' : 'white')
               }}>
-                {totalReturn > 0 ? '+' : ''}{formatCurrency(totalReturn)}
+                {totalProfit > 0 ? '+' : ''}{formatCurrency(totalProfit)}
               </div>
             </div>
           </div>
@@ -533,70 +566,79 @@ export default function Home() {
       {/* List Section */}
       <div style={{ display: 'grid', gap: '1rem' }}>
         {filteredData.map((stock, i) => {
-          const isProfit = (stock.rate || 0) > 0;
-          const isLoss = (stock.rate || 0) < 0;
-          const rateColor = isProfit ? 'var(--up-color)' : (isLoss ? 'var(--down-color)' : 'white');
+          const isUS = isUSStock(stock.code);
+          // Recalculate for display
+          const currencySymbol = isUS ? '$' : '₩';
+          const qty = stock.quantity || 1;
 
-          // ROI Calculation
-          const qty = stock.quantity || 1; // Fallback for old data
-          const currentVal = (stock.currentPrice || 0);
-          const totalVal = currentVal * qty;
-          const investedVal = stock.buyPrice * qty;
+          const currentPrice = stock.currentPrice || 0;
+          const buyPrice = stock.buyPrice || 0;
 
-          const stockReturn = totalVal - investedVal;
-          const stockRoi = investedVal > 0 ? (stockReturn / investedVal) * 100 : 0;
-          const roiColor = stockRoi > 0 ? 'var(--up-color)' : (stockRoi < 0 ? 'var(--down-color)' : 'white');
+          const priceDisplay = isUS
+            ? `$${currentPrice.toFixed(2)}`
+            : `${currentPrice.toLocaleString()}₩`;
+
+          const buyPriceDisplay = isUS
+            ? `$${buyPrice.toFixed(2)}`
+            : `${buyPrice.toLocaleString()}₩`;
+
+          // Profit calc: (Current - Buy) * Qty
+          // Display in native currency usually
+          const profitNative = (currentPrice - buyPrice) * qty;
+          const profitDisplay = isUS
+            ? `${profitNative >= 0 ? '+' : ''}$${profitNative.toFixed(2)}`
+            : `${profitNative >= 0 ? '+' : ''}${profitNative.toLocaleString()}₩`;
+
+          const investedNative = buyPrice * qty;
+          const roi = investedNative > 0 ? (profitNative / investedNative) * 100 : 0;
 
           return (
-            <div key={i} className="glass-panel card flex-between">
-              <div>
-                <h3 style={{ margin: '0 0 0.2rem 0' }}>{stock.name}</h3>
-                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                  {stock.code}
+            <div key={i} className="glass-panel" style={{ padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{
+                  width: '40px', height: '40px',
+                  borderRadius: '10px',
+                  background: 'rgba(255,255,255,0.1)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '1.2rem'
+                }}>
+                  {isUS ? '🇺🇸' : '🇰🇷'}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 'bold' }}>{stock.name}</div>
+                  <div style={{ fontSize: '0.8rem', color: '#888' }}>{stock.code} • {stock.quantity} shares</div>
                 </div>
               </div>
 
-              <div className="text-right" style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '1rem' }}>
-                <div style={{ textAlign: 'right', minWidth: '70px' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#888' }}>매입가</div>
-                  <div>{formatCurrency(stock.buyPrice)}</div>
-                </div>
-
-                <div style={{ textAlign: 'right', minWidth: '40px' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#888' }}>수량</div>
-                  <div>{qty}</div>
-                </div>
-
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#888' }}>평가금 (Total)</div>
-                  <div style={{ fontWeight: 'bold', color: rateColor }}>
-                    {stock.currentPrice ? formatCurrency(totalVal) : 'Loading...'}
-                  </div>
-                </div>
-
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#888' }}>수익률</div>
-                  <div style={{ fontWeight: 'bold', color: roiColor }}>
-                    {stockRoi > 0 ? '+' : ''}{stockRoi.toFixed(2)}%
-                    <span style={{ fontSize: '0.8rem', marginLeft: '5px', color: roiColor }}>
-                      ({stockReturn > 0 ? '+' : ''}{formatCurrency(stockReturn)})
-                    </span>
-                  </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontWeight: 'bold' }}>{priceDisplay}</div>
+                <div style={{
+                  fontSize: '0.9rem',
+                  color: roi >= 0 ? '#00C853' : '#FF5252',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  gap: '0.5rem'
+                }}>
+                  <span>{profitDisplay}</span>
+                  <span style={{
+                    background: roi >= 0 ? 'rgba(0,200,83,0.2)' : 'rgba(255,82,82,0.2)',
+                    padding: '0.1rem 0.4rem',
+                    borderRadius: '4px',
+                    fontSize: '0.75rem'
+                  }}>
+                    {roi >= 0 ? '+' : ''}{roi.toFixed(2)}%
+                  </span>
                 </div>
               </div>
 
               <button
                 onClick={() => handleRemoveStock(stock.code)}
                 style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#ff5252',
-                  cursor: 'pointer',
-                  fontSize: '1.2rem',
-                  marginLeft: '1rem'
+                  background: 'none', border: 'none', color: '#666', cursor: 'pointer', marginLeft: '1rem'
                 }}
               >
-                ×
+                ✕
               </button>
             </div>
           );
